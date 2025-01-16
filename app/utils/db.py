@@ -1,20 +1,10 @@
-from fastapi import FastAPI, HTTPException
-from typing import List
-from gemini import Embeddings  
-from scipy.spatial.distance import cosine
-import langchain  
-from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
-from langchain.llms import OpenAI
-import tweepy  
-import os
+import psycopg2
+DB_CONFIG = {
+    "dbname": "neondb",
+    "user": "neondb_owner",
+    "password": "sfr92KxlUDIc",
+    "host": "ep-winter-cake-a5szakvz-pooler.us-east-2.aws.neon.tech",
+}
 
-
-app = FastAPI()
-
-
-@app.get("/fetch-and-ingest")
-
-@app.get("/processed-tweets", response_model=List[ProcessedTweet])
-
-
+def get_db_connection():
+    return psycopg2.connect(**DB_CONFIG)
