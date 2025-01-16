@@ -17,3 +17,4 @@ class ProcessedTweet(BaseModel):
     tone: List[str]
     categories: List[str]
     timestamp: datetime
+    

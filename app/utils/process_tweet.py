@@ -3,12 +3,15 @@ from langchain.prompts import PromptTemplate
 import langchain
 from langchain_google_genai import ChatGoogleGenerativeAI
 import os
+from dotenv import load_dotenv
 
+
+load_dotenv()
 # Api credentials
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 
 # Initialize the  API client
-llm = ChatGoogleGenerativeAI(model="gemini-pro" , api_key="AIzaSyA5gagkPMgMMYNLYQx0Mt6dVEsN8EQasjw")
+llm = ChatGoogleGenerativeAI(model="gemini-pro" , api_key=GOOGLE_API_KEY)
 
 summarization_prompt = PromptTemplate(
     input_variables=["content"],

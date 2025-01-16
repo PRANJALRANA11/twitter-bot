@@ -4,37 +4,32 @@ import google.generativeai as genai
 from scipy.spatial.distance import cosine
 import tweepy  
 import os
+from dotenv import load_dotenv
 from app.utils.db import get_db_connection 
 from app.utils.process_tweet import extract_hashtags,process_tweet_content
 from app.models.tweets import Tweet, ProcessedTweet
 from psycopg2.extras import Json
 from typing import List
 from datetime import datetime
+from tenacity import retry, stop_after_attempt, wait_fixed
+import random
 
+load_dotenv()
 app = FastAPI()
 
-# Twitter API credentials
-TWITTER_API_KEY = "soqMa6H9JNE4zRukGwpv9OJE4"
-TWITTER_API_SECRET ="eEqN6tnvuM5v1REOprksX8PRoyIvXy9SBMu8t7qmplAHM0sEFH"
-TWITTER_ACCESS_TOKEN = "1680085162456150016-ZJ5rV3fXdSH7H4qPKWBS0IAfA6Jfch"
-TWITTER_ACCESS_SECRET = "cpOAZg4ihXxw57XkfpTmToL47m9Au6wcleduvqD2RYttS"
 
-# Gemini API credentials
+# API credentials
+TWITTER_BEARER_TOKEN =os.getenv("TWITTER_BEARER_TOKEN")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
-GOOGLE_API_KEY = "AIzaSyA5gagkPMgMMYNLYQx0Mt6dVEsN8EQasjw"
-print("Configuring Google API")
-# genai.configure(api_key=GOOGLE_API_KEY)
+
 
 # Initialize the API client
 llm = ChatGoogleGenerativeAI(model="gemini-pro" , api_key=GOOGLE_API_KEY )
 genai.configure(api_key=GOOGLE_API_KEY)
-auth = tweepy.OAuth1UserHandler(
-    TWITTER_API_KEY, TWITTER_API_SECRET, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_SECRET
-)
-twitter_api = tweepy.API(auth)
 
-print("API clients initialized successfully")
+
+
 
 def ingest_tweets(tweets):
     connection = None
@@ -143,43 +138,46 @@ def ingest_tweets(tweets):
             connection.close()
             print("Database connection closed")
             
+            
+            
 @app.get("/fetch-and-ingest")
-def fetch_and_ingest():
+def fetch_and_ingest(request:str):
     try:
-        print("Starting fetch-and-ingest process")
+        ### THIS IS TO FETCH THE TWEET FROM TWITTER API (MY CREDITS EXHAUSTED 
+        # print("Starting fetch-and-ingest process")
+        # api = tweepy.Client(bearer_token=TWITTER_BEARER_TOKEN)
+        
+        # print("Fetching tweets from Twitter API")
+        # public_tweets = api.search_recent_tweets(
+        #     query="india",
+        #     max_results=10,
+        #     tweet_fields=['created_at', 'public_metrics'],
+        #     user_fields=['username', 'id']
+        # )
+        
+        # print(f"Retrieved {len(public_tweets.data) if public_tweets.data else 0} tweets")
+        
+        # for status in public_tweets.data:
+            # print(f"Processing tweet ID: {status.id}")
         tweets = []
-        api = tweepy.Client(bearer_token="AAAAAAAAAAAAAAAAAAAAADrlyAEAAAAARM%2B0AmTRy%2BTLlmr%2FimxgwvozrIU%3DnNBo1qO1ZE3oE26jMRrPms6xWEBFO4qLz1M1uaPZmhmVuoaODl")
-        
-        print("Fetching tweets from Twitter API")
-        public_tweets = api.search_recent_tweets(
-            query="python",
-            max_results=10,
-            tweet_fields=['created_at', 'public_metrics'],
-            user_fields=['username', 'id']
-        )
-        
-        print(f"Retrieved {len(public_tweets.data) if public_tweets.data else 0} tweets")
-        
-        for status in public_tweets.data:
-            print(f"Processing tweet ID: {status.id}")
-            tweets.append({
-                "tweet_id": status.id,
-                "content": status.text,
+        tweets.append({
+                "tweet_id": random.randint(1, 10),
+                "content": request,
                 "author": {
                     "username": "pranjal",
                     "id": "123",
                 },
-                "timestamp": status.created_at,
+                "timestamp": "2025-01-17 16:18:59",
                 "metadata": {
-                    "retweet_count": status.public_metrics['retweet_count'],
-                    "favorite_count": status.public_metrics['like_count'],
+                    "retweet_count": 2,
+                    "favorite_count": 5,
                 },
             })
-            print(f"Tweet ID: {status.id}, Tweet Content {status.text} processed")
+        # print(f"Tweet ID: {status.id}, Tweet Content {status.text} processed")
 
-        print(f"Starting ingestion of {len(tweets)} tweets")
+        # print(f"Starting ingestion of {len(tweets)} tweets")
         ingest_tweets(tweets)
-        print("Tweet ingestion completed successfully")
+        # print("Tweet ingestion completed successfully")
         return {"message": "Tweets fetched and ingested successfully."}
     except Exception as e:
         print(f"Error in fetch-and-ingest: {str(e)}")
@@ -196,19 +194,47 @@ def get_processed_tweets():
         rows = cursor.fetchall()
         print(f"Retrieved {len(rows)} processed tweets")
         
-        processed_tweets = [
-            ProcessedTweet(
-                tweet_id=row[0],
-                content=row[1],
-                summary=row[2],
-                hashtags=row[3],
-                tone=row[4],
-                categories=row[5],
-                timestamp=row[6],
-            )
-            for row in rows
-        ]
-        print("Successfully processed tweet data")
+        processed_tweets = []
+        for row in rows:
+            try:
+                # Convert tweet_id to string
+                tweet_id = str(row[0])
+                
+                # Convert hashtags string to list if needed
+                hashtags = row[3] if isinstance(row[3], list) else []
+                
+                # Convert tone string to list
+                # Handle different possible formats of tone in database
+                if isinstance(row[4], str):
+                    # Remove curly braces and split
+                    tone_str = row[4].strip('{}')
+                    tone = [t.strip() for t in tone_str.split(',')] if tone_str else []
+                elif isinstance(row[4], list):
+                    tone = row[4]
+                else:
+                    tone = []
+                
+                # Convert categories to list if needed
+                categories = row[5] if isinstance(row[5], list) else []
+                
+                # Create ProcessedTweet object with converted data
+                tweet = ProcessedTweet(
+                    tweet_id=tweet_id,
+                    content=row[1] or "",  # Handle potential None values
+                    summary=row[2] or "",
+                    hashtags=hashtags,
+                    tone=tone,
+                    categories=categories,
+                    timestamp=row[6]
+                )
+                processed_tweets.append(tweet)
+                print(f"Successfully processed tweet {tweet_id}")
+                
+            except Exception as e:
+                print(f"Error processing individual tweet {row[0]}: {str(e)}")
+                continue
+        
+        print(f"Successfully processed {len(processed_tweets)} tweets")
         return processed_tweets
 
     except Exception as e:
