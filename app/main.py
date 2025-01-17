@@ -139,6 +139,9 @@ def ingest_tweets(tweets):
             print("Database connection closed")
             
             
+@app.get("/")
+def home():
+    return {"message": "Welcome to the Tweet Processor API!"}
             
 @app.get("/fetch-and-ingest")
 def fetch_and_ingest(request:str):
